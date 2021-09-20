@@ -1,0 +1,97 @@
+#!/bin/bash
+
+set -e
+
+python3 << END
+import pip
+import subprocess
+def import_or_install(packages):
+    for package in packages:
+        try:
+            __import__(package)
+        except ImportError:
+            subprocess.check_call(["python3", "-m", "pip", "install", package])
+import_or_install(["flake8", "mypy", "black", "isort"])
+END
+
+# colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NO_COLOR='\033[0m'
+
+# subroutines
+yell() {
+  echo -e "$RED$0: $*$NO_COLOR" >&2
+}
+
+die() {
+  yell "$*"
+  exit 77
+}
+
+try() {
+  "$@" || die "Error when running '$*'"
+}
+
+success() {
+  echo -e "$GREEN${*:-success}$NO_COLOR"
+}
+
+warning() {
+  echo -e "$YELLOW$*$NO_COLOR"
+}
+
+cont() {
+  warning "Error occured but we can continue. Please re-check problems manually."
+}
+
+# static type check
+echo "Running static type check..."
+try mypy src --ignore-missing-imports --disallow-untyped-defs
+success
+
+# formatting
+echo "Running formatter with black..."
+try black \
+    --line-length=88 \
+    src tests
+success
+
+# linting
+echo "Running linter with flake8..."
+try flake8 \
+  src \
+  tests \
+  --ignore=E203,E121,E123,E126,E226,E24,E704,W503,W504 \
+  --max-line-length=88
+success
+
+# isort
+echo "Run import sorting with isort..."
+try isort \
+  --atomic \
+  --recursive \
+  --project=src,tests \
+  --section-default=THIRDPARTY \
+  --multi-line=3 \
+  --force-grid-wrap=0 \
+  --combine-as \
+  --line-width=88 \
+  --apply \
+  --trailing-comma \
+  src tests
+success
+
+# repeat static type check and linting
+echo "Run mypy again..."
+try mypy src --ignore-missing-imports --disallow-untyped-defs
+success
+
+echo "Running linter with flake8 again..."
+try flake8 \
+  src \
+  tests \
+  --ignore=E203,E121,E123,E126,E226,E24,E704,W503,W504 \
+  --max-line-length=88
+success
